@@ -1,7 +1,13 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// Placeholder hero built from primitives. The Blender model replaces this later;
-// keep the same root/animate() shape so the controller doesn't change.
+// Built by tools/blender/make_hero.py. Clips: idle, run, swing, air, climb, perch.
+const MODEL_URL = `${import.meta.env.BASE_URL}models/hero.glb`;
+const MODEL_HEIGHT = 1.86; // metres, as modelled in Blender
+const WORLD_HEIGHT = 2.6; // how tall the hero stands in the city
+
+// The hero: a box-figure placeholder that is swapped for the Blender model once it loads.
+// Both answer to the same root/animate()/orient() calls, so the controllers don't care which is showing.
 export function createHero() {
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -52,11 +58,41 @@ export function createHero() {
   let phase = 0;
   const lerp = (o, key, target, k) => { o.rotation[key] += (target - o.rotation[key]) * k; };
 
-  // state.mode: 'ground' | 'swing' | 'air' | 'climb'
+  // Blender model, loaded in the background.
+  let mixer = null, current = null;
+  const actions = {};
+  new GLTFLoader().load(MODEL_URL, (gltf) => {
+    const model = gltf.scene;
+    model.scale.setScalar(WORLD_HEIGHT / MODEL_HEIGHT / root.scale.x);
+    model.position.y = body.position.y; // feet on the same line as the placeholder's
+    model.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+    root.add(model);
+    body.visible = false;
+    mixer = new THREE.AnimationMixer(model);
+    for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
+    play('idle', 0);
+  }, undefined, (err) => console.warn('Hero model did not load; keeping the placeholder.', err));
+
+  function play(name, fade = 0.25) {
+    const next = actions[name];
+    if (!next || next === current) return;
+    next.reset().setEffectiveWeight(1).fadeIn(fade).play();
+    current?.fadeOut(fade);
+    current = next;
+  }
+
+  // state.mode: 'ground' | 'swing' | 'air' | 'climb' | 'perch'
   function animate(dt, state) {
+    if (mixer) {
+      const name = state.mode === 'ground' ? (state.speed > 1.5 ? 'run' : 'idle') : state.mode;
+      play(name);
+      current.timeScale = name === 'run' ? THREE.MathUtils.clamp(state.speed / 11, 0.8, 2.2) : 1;
+      mixer.update(dt);
+      return;
+    }
     const k = 1 - Math.exp(-12 * dt);
     let t;
-    if (state.mode === 'ground') {
+    if (state.mode === 'ground' || state.mode === 'perch') {
       phase += dt * state.speed * 0.45;
       const amp = Math.min(state.speed / 12, 1) * 0.95;
       const s = Math.sin(phase) * amp;

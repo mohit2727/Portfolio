@@ -95,11 +95,12 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn }) {
       stopLook.copy(stop.pos).addScaledVector(o, 60).addScaledVector(side, wide ? -10 : 0).add(up.set(0, 15, 0));
     } else {
       // In front of the hero, tower wall and windows behind.
-      stopCam.copy(stop.pos).addScaledVector(o, 13).addScaledVector(side, 5).add(up.set(0, 2.5, 0));
-      stopLook.copy(stop.pos).add(up.set(0, 2.2, 0));
+      // In front of the crouching hero, tower wall and windows behind.
+      stopCam.copy(stop.pos).addScaledVector(o, 9.5).addScaledVector(side, 3.5).add(up.set(0, 1.6, 0));
+      stopLook.copy(stop.pos).add(up.set(0, 0.6, 0));
     }
     right.subVectors(stopLook, stopCam).cross(UP).normalize();
-    if (wide && !stop.intro) stopLook.addScaledVector(right, 3.4);
+    if (wide && !stop.intro) stopLook.addScaledVector(right, 2.6);
     if (!wide && !stop.intro) stopLook.y -= 2.6; // phones: card covers the bottom, keep the hero high
   }
 
@@ -119,7 +120,7 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn }) {
       if (st.intro) tan.copy(st.out);
       else tan.set(-st.out.z, 0, st.out.x);
       hero.orient(UP, st.out, dt, 6);
-      hero.animate(dt, { mode: 'ground', speed: 0 });
+      hero.animate(dt, { mode: 'perch', speed: 0 });
       web.hide();
     } else {
       anchor = sampleLeg(legs[k], f);
