@@ -17,7 +17,7 @@ const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
  * round the corner, down the next) as a chain of web swings anchored to real buildings.
  * `update(dt, t)` takes a progress value t in [0, n] from the page scroll.
  */
-export function createStory({ city, hero, web, camera, rig, sections, spawn }) {
+export function createStory({ city, hero, web, camera, rig, sections, spawn, onWeb }) {
   const stops = [{ pos: spawn.pos.clone(), out: spawn.face.clone(), intro: true }];
   for (const sec of sections) {
     const lm = city.landmarks.find((l) => l.id === sec.id);
@@ -83,7 +83,9 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn }) {
   const stopCam = new THREE.Vector3(), stopLook = new THREE.Vector3();
   const side = new THREE.Vector3(), right = new THREE.Vector3(), tH = new THREE.Vector3();
   const lookSmooth = new THREE.Vector3();
-  let shown = 0, snapped = false;
+  let shown = 0, snapped = false, lastAnchor = null, speed = 0, roll = 0;
+  const lastPos = new THREE.Vector3();
+  const info = { travelling: false, to: null, remaining: 0 };
 
   function frameStop(stop, wide) {
     const o = stop.out;
@@ -94,7 +96,6 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn }) {
       stopCam.copy(stop.pos).addScaledVector(o, -11).addScaledVector(side, wide ? -3.5 : 0).add(up.set(0, 2.5, 0));
       stopLook.copy(stop.pos).addScaledVector(o, 60).addScaledVector(side, wide ? -10 : 0).add(up.set(0, 15, 0));
     } else {
-      // In front of the hero, tower wall and windows behind.
       // In front of the crouching hero, tower wall and windows behind.
       stopCam.copy(stop.pos).addScaledVector(o, 9.5).addScaledVector(side, 3.5).add(up.set(0, 1.6, 0));
       stopLook.copy(stop.pos).add(up.set(0, 0.6, 0));
@@ -129,6 +130,17 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn }) {
       hero.orient(up, tan, dt, 10);
       hero.animate(dt, { mode: anchor ? 'swing' : 'air', speed: 30 });
     }
+    // A fresh anchor means a new web shot.
+    if (anchor && anchor !== lastAnchor && snapped) onWeb?.();
+    lastAnchor = anchor;
+    if (snapped && dt > 0) speed += (pos.distanceTo(lastPos) / dt - speed) * (1 - Math.exp(-6 * dt));
+    lastPos.copy(pos);
+    info.travelling = atStop < 0 && f > 0.06 && f < 0.94;
+    if (atStop < 0) {
+      info.to = stops[k + 1].tower?.section;
+      info.remaining = (1 - easeInOut(f)) * legs[k].total;
+    }
+
     hero.root.position.set(pos.x, pos.y + 0.16, pos.z);
     if (anchor) web.show(hand.copy(up).multiplyScalar(1.5).add(hero.root.position), anchor);
     else web.hide();
@@ -154,6 +166,11 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn }) {
       lookSmooth.lerp(look, 1 - Math.exp(-8 * dt));
     }
     camera.lookAt(lookSmooth);
+    // Bank a little toward the side the web is on.
+    let rollT = 0;
+    if (anchor) rollT = clamp((anchor.x - pos.x) * tH.z - (anchor.z - pos.z) * tH.x, -1, 1) * -0.07 * (1 - w);
+    roll += (rollT - roll) * (1 - Math.exp(-3 * dt));
+    camera.rotateZ(roll);
     const fov = wide ? 55 : 68;
     camera.fov += (fov - camera.fov) * (1 - Math.exp(-3 * dt));
     camera.updateProjectionMatrix();
@@ -165,5 +182,7 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn }) {
     reset() { snapped = false; },
     heroPos: () => pos,
     heading: () => tH,
+    speed: () => speed,
+    info,
   };
 }

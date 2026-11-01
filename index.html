@@ -10,17 +10,25 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
   </head>
-  <body>
+  <body class="loading">
     <div id="app">
       <canvas id="world" tabindex="-1" aria-hidden="true"></canvas>
       <div id="speedlines" aria-hidden="true"></div>
       <div id="flash" aria-hidden="true"></div>
     </div>
+    <div id="loader" class="loader" role="status">
+      <span class="loader-web" aria-hidden="true"></span>
+      <span>Building the city<span class="loader-dots" aria-hidden="true"></span></span>
+    </div>
+    <p id="travel-tag" class="travel-tag" hidden aria-hidden="true"></p>
 
     <!-- Story mode: the page scrolls, the 3D scene follows. -->
     <header class="topbar" id="topbar">
       <a class="topbar-brand" href="#top">Mohit Acharya</a>
-      <button class="roam-btn" data-roam disabled>Explore the city</button>
+      <div class="topbar-actions">
+        <button class="sound-btn" data-sound aria-pressed="false">Sound off</button>
+        <button class="roam-btn" data-roam disabled>Explore the city</button>
+      </div>
     </header>
     <nav class="chapter-nav" id="chapter-nav" aria-label="Chapters"></nav>
 
@@ -69,7 +77,10 @@
         <div><span class="g-val" id="g-speed">0</span><span class="g-unit">km/h</span></div>
         <div><span class="g-val" id="g-alt">0</span><span class="g-unit">m up</span></div>
       </div>
-      <button id="help-btn" class="chip-btn" aria-expanded="false" aria-controls="help">Controls</button>
+      <div class="chip-row">
+        <button class="chip-btn" data-sound aria-pressed="false">Sound off</button>
+        <button id="help-btn" class="chip-btn" aria-expanded="false" aria-controls="help">Controls</button>
+      </div>
     </div>
 
     <div id="help" class="help" hidden>

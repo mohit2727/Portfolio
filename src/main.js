@@ -12,6 +12,7 @@ import { createCameraRig } from './camera.js';
 import { createInput } from './input.js';
 import { createHUD } from './ui/hud.js';
 import { createStoryDom } from './ui/storyDom.js';
+import { createAudio } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -22,6 +23,7 @@ const SPAWN_BLOCK = [13, 19];
 
 // The story text is plain HTML, so render it right away; the 3D city fills in behind it.
 const dom = createStoryDom(SECTIONS);
+const audio = createAudio();
 const onScroll = () => document.body.classList.toggle('scrolled', scrollY > innerHeight * 0.6);
 addEventListener('scroll', onScroll, { passive: true });
 onScroll();
@@ -80,7 +82,7 @@ async function boot() {
   const spawnPos = new THREE.Vector3((roof.minX + roof.maxX) / 2, roof.y1 + 1.05, (roof.minZ + roof.maxZ) / 2);
   const face = new THREE.Vector3(origin.x - spawnPos.x, 0, origin.z - spawnPos.z).normalize();
   spawnPos.addScaledVector(face, Math.min(roof.maxX - roof.minX, roof.maxZ - roof.minZ) * 0.35);
-  const story = createStory({ city, hero, web, camera, rig, sections: SECTIONS, spawn: { pos: spawnPos, face } });
+  const story = createStory({ city, hero, web, camera, rig, sections: SECTIONS, spawn: { pos: spawnPos, face }, onWeb: audio.thwip });
 
   let mode = 'story';
   const input = createInput(canvas, {
@@ -99,6 +101,7 @@ async function boot() {
     city, input, hero, web,
     events: {
       onAttach(n) {
+        audio.thwip();
         if (n === 2) hud.hint('Steer with WASD while swinging. Let go at the bottom of the arc to fling forward.', 7000);
         if (n === 7) hud.hint('Shift reels the web in. Climb any wall by running into it.', 6000);
         if (n === 1 || (time - lastSfx > 5 && Math.random() < 0.3)) {
@@ -164,6 +167,7 @@ async function boot() {
     for (const lm of city.landmarks) lm.inside = Math.hypot(p.x - lm.x, p.z - lm.z) < 75;
     rig.snap(player);
     hud.setVisible(true);
+    travelTag.hidden = true;
     if (isTouch) $('touch').hidden = false;
     hud.hint(isTouch
       ? 'Hold WEB to swing. Drag the left side to move and the right side to look.'
@@ -197,6 +201,23 @@ async function boot() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
+  // Caption box while swinging between towers: "Swinging to MISSIONS · 640 m".
+  const travelTag = $('travel-tag');
+  let tagFor = null, tagAcc = 0;
+  function updateTravelTag(dt) {
+    const { travelling, to, remaining } = story.info;
+    travelTag.hidden = !travelling || !to;
+    if (travelTag.hidden) return;
+    tagAcc += dt;
+    if (to !== tagFor || tagAcc > 0.1) {
+      tagAcc = 0;
+      tagFor = to;
+      travelTag.style.setProperty('--accent', to.color);
+      travelTag.innerHTML = `Swinging to <b>${to.name}</b><span class="dist">${Math.round(remaining)} m</span>`;
+    }
+  }
+  const speedlines = $('speedlines');
+
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05);
@@ -205,15 +226,24 @@ async function boot() {
       const t = dom.progress();
       dom.setActive(t);
       story.update(dt, t, wideQuery.matches);
+      updateTravelTag(dt);
+      audio.setWind(story.speed());
+      speedlines.style.opacity = reduced ? 0 : Math.max(0, Math.min(0.7, (story.speed() - 60) / 120)).toFixed(2);
     } else {
       player.update(dt, time, rig.yaw);
       rig.follow(dt, player, input, reduced);
       checkLandmarks();
       hud.update(player, rig.yaw, dt, reduced);
+      audio.setWind(player.vel.length());
     }
     city.update(dt, time);
     sky.update(camera.position);
     renderer.render(scene, camera);
+  });
+
+  // Reveal the city once the hero is in (or after 6 s regardless).
+  Promise.race([hero.ready, new Promise((r) => setTimeout(r, 6000))]).then(() => {
+    document.body.classList.remove('loading');
   });
 
   // Handy while tuning in the browser console.
@@ -222,5 +252,7 @@ async function boot() {
 
 boot().catch((err) => {
   console.error(err);
+  document.body.classList.remove('loading');
+  $('loader').hidden = true;
   for (const b of document.querySelectorAll('[data-roam]')) b.textContent = '3D needs WebGL';
 });

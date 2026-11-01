@@ -84,6 +84,19 @@ export function createStoryDom(sections) {
     document.body.classList.toggle('roam', roam);
   }
 
+  // Pop each card the first time it rises into view.
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      }
+    }, { threshold: 0.12 });
+    cards.forEach((c) => io.observe(c));
+  }
+
   layout();
   addEventListener('resize', layout);
   document.fonts?.ready.then(layout);

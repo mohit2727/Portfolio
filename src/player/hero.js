@@ -59,8 +59,9 @@ export function createHero() {
   const lerp = (o, key, target, k) => { o.rotation[key] += (target - o.rotation[key]) * k; };
 
   // Blender model, loaded in the background.
-  let mixer = null, current = null;
+  let mixer = null, current = null, markReady;
   const actions = {};
+  const ready = new Promise((r) => { markReady = r; }); // settles whether or not the model loads
   new GLTFLoader().load(MODEL_URL, (gltf) => {
     const model = gltf.scene;
     model.scale.setScalar(WORLD_HEIGHT / MODEL_HEIGHT / root.scale.x);
@@ -71,7 +72,11 @@ export function createHero() {
     mixer = new THREE.AnimationMixer(model);
     for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
     play('idle', 0);
-  }, undefined, (err) => console.warn('Hero model did not load; keeping the placeholder.', err));
+    markReady();
+  }, undefined, (err) => {
+    console.warn('Hero model did not load; keeping the placeholder.', err);
+    markReady();
+  });
 
   function play(name, fade = 0.25) {
     const next = actions[name];
@@ -131,5 +136,5 @@ export function createHero() {
     root.quaternion.slerp(q, 1 - Math.exp(-rate * dt));
   }
 
-  return { root, animate, orient };
+  return { root, animate, orient, ready };
 }

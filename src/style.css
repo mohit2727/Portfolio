@@ -234,6 +234,44 @@ button:disabled { cursor: progress; }
 }
 body.scrolled .topbar-brand { opacity: 1; transform: none; }
 body.roam .topbar { display: none; }
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.sound-btn {
+  padding: 6px 10px; border: 1px solid var(--hud-line); border-radius: 999px; background: var(--hud-bg);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.sound-btn:hover, .sound-btn[aria-pressed="true"] { border-color: var(--pow); color: var(--pow); }
+.chip-row { display: flex; gap: 8px; }
+.chip-btn[aria-pressed="true"] { border-color: var(--pow); color: var(--pow); }
+
+/* Loading: the canvas fades in once the city and the hero are ready. */
+#world { transition: opacity 1.2s ease; }
+body.loading #world { opacity: 0; }
+.loader {
+  position: fixed; z-index: 6; right: var(--gut-r); bottom: var(--gut-b);
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--web-red);
+  font-family: var(--display); font-size: 20px; letter-spacing: 0.04em;
+  transition: opacity 0.5s, transform 0.5s;
+}
+body:not(.loading) .loader { opacity: 0; transform: translateY(12px); pointer-events: none; }
+.loader-web {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: repeating-conic-gradient(var(--ink) 0deg 4deg, transparent 4deg 45deg), radial-gradient(circle, transparent 30%, var(--ink) 32% 38%, transparent 40% 62%, var(--ink) 64% 70%, transparent 72%);
+  animation: spin 2.4s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loader-dots::after { content: ''; animation: dots 1.2s steps(4) infinite; }
+@keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+/* Caption box shown while swinging between towers. */
+.travel-tag {
+  position: fixed; z-index: 3; left: 50%; bottom: calc(var(--gut-b) + 10px); transform: translateX(-50%) rotate(-1deg);
+  margin: 0; padding: 6px 14px; white-space: nowrap;
+  background: var(--pow); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink);
+  font-family: var(--display); font-size: 22px; letter-spacing: 0.04em;
+}
+.travel-tag b { color: var(--accent, var(--web-red)); -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; font-weight: 400; }
+.travel-tag .dist { font-family: var(--mono); font-size: 13px; font-weight: 700; margin-left: 8px; font-variant-numeric: tabular-nums; }
 .roam-btn {
   padding: 8px 14px; border: 2px solid var(--ink); background: var(--paper); color: var(--ink);
   font-family: var(--display); font-size: 18px; letter-spacing: 0.05em; box-shadow: 3px 3px 0 var(--web-red);
@@ -293,9 +331,12 @@ body.roam .topbar { display: none; }
 @keyframes cue { 50% { transform: translateY(6px); } }
 
 /* Each chapter: a long empty run (the swing) and then the card. */
-.chapter { padding-top: 140vh; display: flex; justify-content: flex-end; }
+.chapter { padding-top: 170vh; display: flex; justify-content: flex-end; }
 .story-card { width: min(470px, 100%); margin-right: clamp(0px, 4vw, 56px); transform: rotate(-0.4deg); }
 .chapter:nth-of-type(odd) .story-card { transform: rotate(0.4deg); }
+/* Cards stay readable at rest; the pop only plays as one rises into view. */
+.story-card.in { animation: card-in 0.55s cubic-bezier(0.2, 1.5, 0.4, 1); }
+@keyframes card-in { from { transform: translateX(60px) rotate(4deg) scale(0.94); } }
 
 .outro {
   margin-top: 70vh; min-height: 80vh;
@@ -342,7 +383,7 @@ body.roam .topbar { display: none; }
   .g-val { font-size: 18px; }
   .chip-btn:not(.chip-strong) { display: none; }
   .hud-br { flex-direction: column-reverse; }
-  .chapter { padding-top: 120vh; }
+  .chapter { padding-top: 150vh; }
   .story-card { margin-right: 0; transform: none !important; }
   .chapter-nav { right: 6px; gap: 10px; }
   .dot { width: 10px; height: 10px; }
