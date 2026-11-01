@@ -1,0 +1,50 @@
+# Web City · Mohit Acharya's portfolio
+
+A spider-hero portfolio set in a 2.5 km night city built in Three.js. Each landmark tower holds one section of the portfolio.
+
+Two modes:
+- **Story (default):** you scroll the page and the hero swings down the street canyons from tower to tower. Each chapter's comic card scrolls past while he waits on that tower's balcony. No controls to learn.
+- **Free roam ("Explore the city"):** a playable version. You swing anywhere and find the towers yourself.
+
+## Run it
+
+```bash
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. `npm run build` writes a static site to `dist/`.
+
+## Controls
+
+| Input | Action |
+|---|---|
+| W A S D | Move and steer |
+| Mouse | Look (click locks the cursor, Esc frees it) |
+| Hold Space / click | Shoot a web and swing; release to fling |
+| Run into a wall | Climb; Space jumps off |
+| Shift | Sprint, or reel the web in |
+| Touch | Left side joystick, right side look, WEB and JUMP buttons |
+
+## Where things live
+
+| File | What it does |
+|---|---|
+| `src/content.js` | All portfolio text and the tower each section lives in. Edit this to change content. |
+| `src/config.js` | City size, fog, seeded random generator |
+| `src/world/city.js` | Procedural buildings (one instanced draw call, shader-drawn windows), streets, traffic, park, landmark towers |
+| `src/world/sky.js` | Sky gradient, stars, moon |
+| `src/story/story.js` | Story route: street-following swing chain between tower balconies, scroll-driven camera |
+| `src/ui/storyDom.js` | Story chapters on the page, and the mapping from scroll position to story progress |
+| `src/player/controller.js` | Free-roam physics: walking, jumping, wall climbing, web-swinging |
+| `src/player/hero.js` | Placeholder hero made of boxes. The Blender model replaces this. |
+| `src/camera.js` | Chase camera |
+| `src/ui/hud.js` | Mission list, minimap, gauges, comic-page panels |
+
+## Roadmap
+
+1. Hero character modelled and rigged in Blender, exported as `.glb`, with run, swing and climb animations
+2. Hand-built landmark towers to replace the boxes
+3. Sound (web shots, wind at speed, city ambience)
+4. Loading screen, and a plain HTML version of the content for SEO and recruiters
+5. Deploy to Vercel
