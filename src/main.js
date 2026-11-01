@@ -4,6 +4,7 @@ import { FOG_HEX, FOG_DENSITY, MOON_DIR } from './config.js';
 import { SECTIONS } from './content.js';
 import { createCity } from './world/city.js';
 import { createSky } from './world/sky.js';
+import { createStreets } from './world/street.js';
 import { createHero } from './player/hero.js';
 import { createWeb } from './player/web.js';
 import { createPlayer } from './player/controller.js';
@@ -71,6 +72,7 @@ async function boot() {
 
   const sky = createSky(scene);
   const city = createCity(scene, renderer);
+  const streets = createStreets(scene);
   const hero = createHero();
   scene.add(hero.root);
   const web = createWeb(scene);
@@ -237,6 +239,7 @@ async function boot() {
       audio.setWind(player.vel.length());
     }
     city.update(dt, time);
+    streets.update(dt, time);
     sky.update(camera.position);
     renderer.render(scene, camera);
   });
@@ -247,7 +250,7 @@ async function boot() {
   });
 
   // Handy while tuning in the browser console.
-  if (import.meta.env.DEV) window.__city = { player, rig, city, input, story, dom, travel, enterRoam, exitRoam };
+  if (import.meta.env.DEV) window.__city = { player, rig, city, input, story, dom, travel, enterRoam, exitRoam, renderer, scene, camera };
 }
 
 boot().catch((err) => {

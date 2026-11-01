@@ -24,7 +24,7 @@ arm = next(o for o in bpy.context.scene.objects if o.type == "ARMATURE")
 scene = bpy.context.scene
 scene.render.engine = "BLENDER_WORKBENCH"
 scene.display.shading.light = "STUDIO"
-scene.display.shading.color_type = "MATERIAL"
+scene.display.shading.color_type = "TEXTURE"
 scene.display.shading.show_cavity = True
 scene.render.resolution_x, scene.render.resolution_y = 360, 460
 scene.render.film_transparent = False
@@ -32,7 +32,7 @@ scene.world = scene.world or bpy.data.worlds.new("World")
 
 cam_data = bpy.data.cameras.new("cam")
 cam_data.type = "ORTHO"
-cam_data.ortho_scale = 2.4
+cam_data.ortho_scale = 2.2
 cam = bpy.data.objects.new("cam", cam_data)
 scene.collection.objects.link(cam)
 scene.camera = cam
