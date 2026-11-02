@@ -3,7 +3,7 @@
 A spider-hero portfolio set in a 2.5 km night city built in Three.js. Each landmark tower holds one section of the portfolio.
 
 Two modes:
-- **Story (default):** you scroll the page and the hero swings down the street canyons from tower to tower. Each chapter's comic card scrolls past while he waits on that tower's balcony. No controls to learn.
+- **Story (default):** the camera dives from the sky onto the hero's rooftop, then you scroll and the hero swings down the street canyons from tower to tower. Each chapter's comic card scrolls past while he waits on that tower's balcony, and the story ends on a crane shot over the whole city. No controls to learn.
 - **Free roam ("Explore the city"):** a playable version. You swing anywhere and find the towers yourself.
 
 ## Run it
@@ -34,6 +34,8 @@ Open http://localhost:5173. `npm run build` writes a static site to `dist/`.
 | `src/config.js` | City size, fog, seeded random generator |
 | `src/world/city.js` | Procedural buildings (one instanced draw call, shader-drawn windows), streets, traffic, park, landmark towers |
 | `src/world/sky.js` | Sky gradient, stars, moon |
+| `src/world/street.js` | Traffic and pedestrians, animated entirely on the GPU |
+| `src/post.js` | Bloom, speed blur, speed lines and vignette; quality tiers that step down on slow devices |
 | `src/story/story.js` | Story route: street-following swing chain between tower balconies, scroll-driven camera |
 | `src/ui/storyDom.js` | Story chapters on the page, and the mapping from scroll position to story progress |
 | `src/player/controller.js` | Free-roam physics: walking, jumping, wall climbing, web-swinging |

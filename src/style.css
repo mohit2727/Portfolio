@@ -41,13 +41,7 @@ button:disabled { cursor: progress; }
 #world { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
 
 /* ---------- Full-screen effects ---------- */
-#speedlines {
-  position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 2;
-  background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(243, 234, 210, 0.16) 0deg 0.6deg, transparent 0.6deg 7deg);
-  -webkit-mask-image: radial-gradient(ellipse at center, transparent 38%, #000 75%);
-  mask-image: radial-gradient(ellipse at center, transparent 38%, #000 75%);
-  transition: opacity 0.25s;
-}
+/* Speed lines, blur and colour fringe while swinging are drawn in the final WebGL pass (src/post.js). */
 #flash {
   position: fixed; inset: 0; pointer-events: none; z-index: 30; opacity: 0;
   background: radial-gradient(var(--ink) 2px, transparent 2.2px) 0 0 / 12px 12px, var(--web-red);
@@ -235,6 +229,7 @@ button:disabled { cursor: progress; }
 body.scrolled .topbar-brand { opacity: 1; transform: none; }
 body.roam .topbar { display: none; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
+.topbar-actions > * { white-space: nowrap; }
 .sound-btn {
   padding: 6px 10px; border: 1px solid var(--hud-line); border-radius: 999px; background: var(--hud-bg);
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
@@ -243,25 +238,66 @@ body.roam .topbar { display: none; }
 .chip-row { display: flex; gap: 8px; }
 .chip-btn[aria-pressed="true"] { border-color: var(--pow); color: var(--pow); }
 
-/* Loading: the canvas fades in once the city and the hero are ready. */
-#world { transition: opacity 1.2s ease; }
-body.loading #world { opacity: 0; }
+/* Loading: a comic cover over the whole page. When the city is ready the cover splits into two
+   panels that slide away (transform only, so it stays smooth while the GPU warms up). */
 .loader {
-  position: fixed; z-index: 6; right: var(--gut-r); bottom: var(--gut-b);
-  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
-  background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--web-red);
-  font-family: var(--display); font-size: 20px; letter-spacing: 0.04em;
-  transition: opacity 0.5s, transform 0.5s;
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-items: center; padding: 16px;
+  pointer-events: auto;
 }
-body:not(.loading) .loader { opacity: 0; transform: translateY(12px); pointer-events: none; }
+.loader::before, .loader::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 50.5%;
+  background:
+    radial-gradient(rgba(227, 38, 47, 0.22) 1.6px, transparent 1.8px) 0 0 / 11px 11px,
+    var(--night);
+  transition: transform 0.95s cubic-bezier(0.75, 0, 0.2, 1) 0.15s;
+}
+.loader::before { top: 0; border-bottom: 4px solid var(--ink); }
+.loader::after { bottom: 0; border-top: 4px solid var(--ink); }
+.loader-card {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  width: min(360px, 100%); padding: 22px 24px 18px;
+  background: var(--paper); color: var(--ink); border: 4px solid var(--ink); box-shadow: 8px 8px 0 var(--web-red);
+  transform: rotate(-1.2deg);
+  transition: opacity 0.3s, transform 0.4s cubic-bezier(0.5, 0, 0.75, 0);
+}
+.loader-issue {
+  margin: 0; padding: 3px 9px; background: var(--ink); color: var(--paper);
+  font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+}
+.loader-title {
+  margin: 0; font-family: var(--display); font-size: 64px; line-height: 0.9; letter-spacing: 0.03em;
+  color: var(--web-red); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 4px 4px 0 var(--suit-blue);
+}
+.loader-bar { width: 100%; height: 14px; border: 3px solid var(--ink); background: #fff; overflow: hidden; }
+.loader-bar span {
+  display: block; height: 100%; transform-origin: 0 50%; transform: scaleX(0);
+  background: repeating-linear-gradient(-45deg, var(--web-red) 0 8px, #c41d26 8px 16px);
+  transition: transform 0.35s ease-out;
+}
+.loader-step {
+  display: flex; justify-content: space-between; width: 100%; margin: 0;
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+}
 .loader-web {
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 34px; height: 34px; border-radius: 50%;
   background: repeating-conic-gradient(var(--ink) 0deg 4deg, transparent 4deg 45deg), radial-gradient(circle, transparent 30%, var(--ink) 32% 38%, transparent 40% 62%, var(--ink) 64% 70%, transparent 72%);
   animation: spin 2.4s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loader-dots::after { content: ''; animation: dots 1.2s steps(4) infinite; }
-@keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+body:not(.loading) .loader { pointer-events: none; visibility: hidden; transition: visibility 0s 1.2s; }
+body:not(.loading) .loader::before { transform: translateY(-101%); }
+body:not(.loading) .loader::after { transform: translateY(101%); }
+body:not(.loading) .loader-card { opacity: 0; transform: rotate(-1.2deg) scale(0.85); }
+
+/* Story progress along the top edge. */
+.progress { position: fixed; z-index: 5; top: 0; left: 0; right: 0; height: 4px; background: rgba(6, 7, 13, 0.55); pointer-events: none; }
+.progress span {
+  display: block; height: 100%; transform-origin: 0 50%; transform: scaleX(0);
+  background: linear-gradient(90deg, var(--web-red), var(--pow));
+}
+body.roam .progress { display: none; }
 
 /* Caption box shown while swinging between towers. */
 .travel-tag {
@@ -332,16 +368,38 @@ body:not(.loading) .loader { opacity: 0; transform: translateY(12px); pointer-ev
 
 /* Each chapter: a long empty run (the swing) and then the card. */
 .chapter { padding-top: 170vh; display: flex; justify-content: flex-end; }
-.story-card { width: min(470px, 100%); margin-right: clamp(0px, 4vw, 56px); transform: rotate(-0.4deg); }
-.chapter:nth-of-type(odd) .story-card { transform: rotate(0.4deg); }
-/* Cards stay readable at rest; the pop only plays as one rises into view. */
-.story-card.in { animation: card-in 0.55s cubic-bezier(0.2, 1.5, 0.4, 1); }
-@keyframes card-in { from { transform: translateX(60px) rotate(4deg) scale(0.94); } }
+.story-card { --tilt: -0.4deg; width: min(470px, 100%); margin-right: clamp(0px, 4vw, 56px); transform: rotate(var(--tilt)); }
+.chapter:nth-of-type(odd) .story-card { --tilt: 0.4deg; }
+/* Cards wait off to the side until they rise into view, then slam in and fill panel by panel. */
+.story-card.pending { opacity: 0; transform: translateX(70px) rotate(4deg) scale(0.94); }
+.story-card.pending .panel-body > * { opacity: 0; }
+.story-card.in { animation: card-in 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+.story-card.in .panel-head h2 { animation: slam 0.5s cubic-bezier(0.2, 1.8, 0.4, 1) 0.12s both; }
+.story-card.in .panel-body > * { animation: rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both; animation-delay: calc(0.22s + var(--i, 0) * 0.07s); }
+@keyframes card-in {
+  from { opacity: 0; transform: translateX(70px) rotate(4deg) scale(0.94); }
+  to { opacity: 1; transform: rotate(var(--tilt)); }
+}
+@keyframes slam { from { opacity: 0; transform: scale(1.6) rotate(-4deg); } }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+
+/* Cover: once the loader opens, the title slams in as the camera dives toward the rooftop. */
+body:not(.ready) .intro > * { opacity: 0; }
+body.ready .intro > * { animation: rise 0.8s cubic-bezier(0.2, 0.8, 0.3, 1) both; animation-delay: calc(1.2s + var(--d, 0s)); }
+body.ready .intro .cover-title { animation: none; }
+body.ready .cover-title span { animation: title-in 0.7s cubic-bezier(0.2, 1.5, 0.4, 1) both; animation-delay: 1.35s; }
+body.ready .cover-title span + span { animation-delay: 1.5s; }
+.intro .cover-tag { --d: 0.55s; }
+.intro .cover-actions { --d: 0.7s; }
+.intro .scroll-cue { --d: 1.1s; }
+@keyframes title-in { from { opacity: 0; transform: translateX(-40px) skewX(-8deg) scale(1.08); } }
 
 .outro {
-  margin-top: 70vh; min-height: 80vh;
+  margin-top: 90vh; min-height: 80vh;
   display: flex; flex-direction: column; justify-content: center; gap: 16px;
-  padding-block: 64px; padding-left: clamp(0px, 4vw, 48px);
+  padding-block: 64px; padding-left: calc(var(--gut-l) + clamp(0px, 4vw, 48px)); padding-right: var(--gut-r);
+  margin-left: calc(-1 * var(--gut-l)); margin-right: calc(-1 * var(--gut-r));
+  background: linear-gradient(90deg, rgba(6, 7, 13, 0.82) 0%, rgba(6, 7, 13, 0.4) 50%, transparent 78%);
 }
 .outro p { margin: 0; max-width: 46ch; font-size: 19px; }
 .outro-big {
@@ -349,6 +407,12 @@ body:not(.loading) .loader { opacity: 0; transform: translateY(12px); pointer-ev
   color: var(--paper); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 5px 5px 0 var(--web-red);
 }
 .credit { font-family: var(--mono); font-size: 12px !important; color: var(--mist); }
+.outro .issue { margin-bottom: 4px; }
+.back-top {
+  align-self: flex-start; font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--paper); text-decoration-thickness: 2px; text-underline-offset: 4px;
+}
+.back-top:hover { color: var(--pow); }
 
 .chip-strong { background: var(--paper); color: var(--ink); border-color: var(--ink); font-weight: 700; }
 .chip-strong:hover { background: var(--pow); }
@@ -399,5 +463,5 @@ body:not(.loading) .loader { opacity: 0; transform: translateY(12px); pointer-ev
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-  #speedlines { display: none; }
+  *, *::before, *::after { animation-delay: 0s !important; transition-delay: 0s !important; }
 }

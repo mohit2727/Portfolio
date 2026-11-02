@@ -8,7 +8,7 @@ const WORLD_HEIGHT = 2.6; // how tall the hero stands in the city
 
 // The hero: a box-figure placeholder that is swapped for the Blender model once it loads.
 // Both answer to the same root/animate()/orient() calls, so the controllers don't care which is showing.
-export function createHero() {
+export function createHero({ onProgress } = {}) {
   const root = new THREE.Group();
   const body = new THREE.Group();
   body.position.y = -1.45; // root sits at the torso, so swinging rotates around the body
@@ -73,7 +73,9 @@ export function createHero() {
     for (const clip of gltf.animations) actions[clip.name] = mixer.clipAction(clip);
     play('idle', 0);
     markReady();
-  }, undefined, (err) => {
+  }, (e) => {
+    if (e.total) onProgress?.(e.loaded / e.total);
+  }, (err) => {
     console.warn('Hero model did not load; keeping the placeholder.', err);
     markReady();
   });

@@ -1,6 +1,6 @@
 import './style.css';
 import * as THREE from 'three';
-import { FOG_HEX, FOG_DENSITY, MOON_DIR } from './config.js';
+import { FOG_HEX, FOG_DENSITY, MOON_DIR, clamp } from './config.js';
 import { SECTIONS } from './content.js';
 import { createCity } from './world/city.js';
 import { createSky } from './world/sky.js';
@@ -14,10 +14,12 @@ import { createInput } from './input.js';
 import { createHUD } from './ui/hud.js';
 import { createStoryDom } from './ui/storyDom.js';
 import { createAudio } from './audio.js';
+import { createPost, TIERS } from './post.js';
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isTouch = matchMedia('(pointer: coarse)').matches;
+const lowEnd = isTouch || (navigator.hardwareConcurrency || 8) <= 4;
 const wideQuery = matchMedia('(min-width: 761px)');
 const VISITED_KEY = 'webcity:visited';
 const SPAWN_BLOCK = [13, 19];
@@ -48,16 +50,33 @@ function saveVisited(set) {
   } catch { /* storage is optional */ }
 }
 
+// Loader: building steps and the hero download share one progress bar.
+const loading = { build: 0, model: 0, compile: 0 };
+function setProgress(step) {
+  const p = loading.build * 0.55 + loading.model * 0.35 + loading.compile * 0.1;
+  $('loader-fill').style.transform = `scaleX(${p.toFixed(3)})`;
+  $('loader-pct').textContent = `${Math.round(p * 100)}%`;
+  if (step) $('loader-step').textContent = step;
+}
+// Give the browser a moment to paint the loader between the heavy build steps.
+const breathe = () => new Promise((r) => setTimeout(r, 16));
+
 async function boot() {
+  setProgress('Inking the panels');
+  // Start the hero download first so it runs while the city is being built.
+  const hero = createHero({ onProgress: (p) => { loading.model = p; setProgress(); } });
+
   // Billboards are drawn on canvases, so the comic fonts must be ready first.
   await Promise.race([
     Promise.all([document.fonts.load('100px Bangers'), document.fonts.load('700 40px "Space Mono"')]),
     new Promise((r) => setTimeout(r, 3000)),
   ]);
+  loading.build = 0.15;
+  setProgress('Raising the towers');
+  await breathe();
 
   const canvas = $('world');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
   renderer.setSize(innerWidth, innerHeight);
 
   const scene = new THREE.Scene();
@@ -72,11 +91,17 @@ async function boot() {
 
   const sky = createSky(scene);
   const city = createCity(scene, renderer);
-  const streets = createStreets(scene);
-  const hero = createHero();
+  loading.build = 0.7;
+  setProgress('Filling the streets');
+  await breathe();
+  const streets = createStreets(scene, lowEnd ? { cars: 600, people: 1400 } : undefined);
   scene.add(hero.root);
   const web = createWeb(scene);
   const rig = createCameraRig(camera, city);
+  const post = createPost(renderer, scene, camera, lowEnd ? 1 : 0);
+  loading.build = 0.9;
+  setProgress('Suiting up the hero');
+  await breathe();
 
   // Intro rooftop: tall enough to see over downtown toward the Origin tower.
   const roof = city.spawnRoof(...SPAWN_BLOCK, 150, 240) || city.spawnRoof(...SPAWN_BLOCK);
@@ -84,7 +109,15 @@ async function boot() {
   const spawnPos = new THREE.Vector3((roof.minX + roof.maxX) / 2, roof.y1 + 1.05, (roof.minZ + roof.maxZ) / 2);
   const face = new THREE.Vector3(origin.x - spawnPos.x, 0, origin.z - spawnPos.z).normalize();
   spawnPos.addScaledVector(face, Math.min(roof.maxX - roof.minX, roof.maxZ - roof.minZ) * 0.35);
-  const story = createStory({ city, hero, web, camera, rig, sections: SECTIONS, spawn: { pos: spawnPos, face }, onWeb: audio.thwip });
+  const story = createStory({
+    city, hero, web, camera, rig, reduced,
+    sections: SECTIONS,
+    spawn: { pos: spawnPos, face },
+    onWeb: audio.thwip,
+    onLand: audio.land,
+  });
+  loading.build = 1;
+  setProgress();
 
   let mode = 'story';
   const input = createInput(canvas, {
@@ -162,6 +195,7 @@ async function boot() {
     storyScroll = scrollY;
     mode = 'roam';
     dom.setMode(true);
+    city.setFocus(null);
     const p = story.heroPos(), h = story.heading();
     rig.yaw = Math.atan2(-h.x, -h.z);
     rig.pitch = 0.25;
@@ -197,65 +231,111 @@ async function boot() {
   addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && mode === 'roam' && hud.currentId()) hud.closePanel();
   });
-  addEventListener('resize', () => {
-    camera.aspect = innerWidth / innerHeight;
+  // Checked every frame rather than on 'resize', so a page that booted in a hidden or
+  // zero-sized window still picks up its real size.
+  let sizeW = 0, sizeH = 0;
+  function syncSize() {
+    if (innerWidth === sizeW && innerHeight === sizeH) return;
+    if (!innerWidth || !innerHeight) return;
+    sizeW = innerWidth;
+    sizeH = innerHeight;
+    camera.aspect = sizeW / sizeH;
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-  });
+    post.resize();
+  }
 
   // Caption box while swinging between towers: "Swinging to MISSIONS · 640 m".
   const travelTag = $('travel-tag');
-  let tagFor = null, tagAcc = 0;
-  function updateTravelTag(dt) {
+  let tagFor = null, tagDist = -1;
+  function updateTravelTag() {
     const { travelling, to, remaining } = story.info;
     travelTag.hidden = !travelling || !to;
     if (travelTag.hidden) return;
-    tagAcc += dt;
-    if (to !== tagFor || tagAcc > 0.1) {
-      tagAcc = 0;
-      tagFor = to;
-      travelTag.style.setProperty('--accent', to.color);
-      travelTag.innerHTML = `Swinging to <b>${to.name}</b><span class="dist">${Math.round(remaining)} m</span>`;
+    const d = Math.round(remaining / 5) * 5;
+    if (to === tagFor && d === tagDist) return;
+    tagFor = to;
+    tagDist = d;
+    travelTag.style.setProperty('--accent', to.color);
+    travelTag.innerHTML = `Swinging to <b>${to.name}</b><span class="dist">${d} m</span>`;
+  }
+
+  // Adaptive quality: after a warm-up, step down a tier whenever frames run slow for a while.
+  const perf = { warm: 0, acc: 0, frames: 0 };
+  function watchFrameRate(raw) {
+    if (raw > 0.25 || document.hidden) return; // tab switches and stalls say nothing about the GPU
+    perf.warm += raw;
+    if (perf.warm < 3 || post.tier() >= TIERS.length - 1) return;
+    perf.acc += raw;
+    perf.frames++;
+    if (perf.acc < 2) return;
+    const avg = perf.acc / perf.frames;
+    perf.acc = perf.frames = 0;
+    if (avg > 1 / 40) {
+      post.setTier(post.tier() + 1);
+      perf.warm = 1; // give the new tier a second to settle before judging it
     }
   }
-  const speedlines = $('speedlines');
 
+  let fx = 0, revealedAt = -1;
   const clock = new THREE.Clock();
-  renderer.setAnimationLoop(() => {
-    const dt = Math.min(clock.getDelta(), 0.05);
+  function frame() {
+    const raw = clock.getDelta();
+    const dt = Math.min(raw, 0.05);
     time += dt;
+    syncSize();
+    let speed;
     if (mode === 'story') {
       const t = dom.progress();
       dom.setActive(t);
-      story.update(dt, t, wideQuery.matches);
-      updateTravelTag(dt);
-      audio.setWind(story.speed());
-      speedlines.style.opacity = reduced ? 0 : Math.max(0, Math.min(0.7, (story.speed() - 60) / 120)).toFixed(2);
+      story.update(dt, t, wideQuery.matches, time);
+      updateTravelTag();
+      speed = story.speed();
+      fx += (clamp((speed - 50) / 140, 0, 0.85) - fx) * (1 - Math.exp(-4 * dt));
     } else {
       player.update(dt, time, rig.yaw);
       rig.follow(dt, player, input, reduced);
       checkLandmarks();
-      hud.update(player, rig.yaw, dt, reduced);
-      audio.setWind(player.vel.length());
+      hud.update(player, rig.yaw, dt);
+      speed = player.vel.length();
+      fx += (clamp((speed - 35) / 80, 0, 1) - fx) * (1 - Math.exp(-4 * dt));
     }
+    audio.setWind(speed);
     city.update(dt, time);
     streets.update(dt, time);
     sky.update(camera.position);
-    renderer.render(scene, camera);
-  });
+    const fade = revealedAt < 0 ? 0 : clamp((time - revealedAt) / 1.1, 0, 1);
+    post.render(time, reduced ? 0 : fx, fade * fade);
+    if (revealedAt >= 0) watchFrameRate(raw);
+  }
 
-  // Reveal the city once the hero is in (or after 6 s regardless).
-  Promise.race([hero.ready, new Promise((r) => setTimeout(r, 6000))]).then(() => {
-    document.body.classList.remove('loading');
-  });
+  // Wait for the hero (or give up after 8 s), then compile every shader before the first frame.
+  await Promise.race([hero.ready, new Promise((r) => setTimeout(r, 8000))]);
+  loading.model = 1;
+  setProgress('Lighting the city');
+  await breathe();
+  syncSize();
+  story.update(0, dom.progress(), wideQuery.matches, 0);
+  try {
+    await renderer.compileAsync(scene, camera);
+  } catch { /* compiles on first render instead */ }
+  loading.compile = 1;
+  setProgress('Ready');
+
+  // Opening fly-in, unless the page was reloaded part-way down the story.
+  if (scrollY < innerHeight * 0.3) story.playIntro();
+  renderer.setAnimationLoop(frame);
+  await new Promise((r) => setTimeout(r, 120)); // let the first frames land before the loader opens
+  revealedAt = time;
+  document.body.classList.remove('loading');
+  document.body.classList.add('ready');
 
   // Handy while tuning in the browser console.
-  if (import.meta.env.DEV) window.__city = { player, rig, city, input, story, dom, travel, enterRoam, exitRoam, renderer, scene, camera };
+  if (import.meta.env.DEV) window.__city = { player, rig, city, input, story, dom, travel, enterRoam, exitRoam, renderer, scene, camera, post };
 }
 
 boot().catch((err) => {
   console.error(err);
   document.body.classList.remove('loading');
-  $('loader').hidden = true;
+  document.body.classList.add('ready');
   for (const b of document.querySelectorAll('[data-roam]')) b.textContent = '3D needs WebGL';
 });

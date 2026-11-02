@@ -13,13 +13,19 @@
   <body class="loading">
     <div id="app">
       <canvas id="world" tabindex="-1" aria-hidden="true"></canvas>
-      <div id="speedlines" aria-hidden="true"></div>
       <div id="flash" aria-hidden="true"></div>
     </div>
-    <div id="loader" class="loader" role="status">
-      <span class="loader-web" aria-hidden="true"></span>
-      <span>Building the city<span class="loader-dots" aria-hidden="true"></span></span>
+    <div id="loader" class="loader" role="status" aria-live="polite">
+      <div class="loader-card">
+        <span class="loader-web" aria-hidden="true"></span>
+        <p class="loader-issue">Issue #01</p>
+        <p class="loader-title">Web City</p>
+        <div class="loader-bar" aria-hidden="true"><span id="loader-fill"></span></div>
+        <p class="loader-step"><span id="loader-step">Inking the panels</span><span id="loader-pct">0%</span></p>
+      </div>
     </div>
+    <noscript><style>.loader { display: none; } .intro > * { opacity: 1 !important; }</style></noscript>
+    <div class="progress" aria-hidden="true"><span id="progress-fill"></span></div>
     <p id="travel-tag" class="travel-tag" hidden aria-hidden="true"></p>
 
     <!-- Story mode: the page scrolls, the 3D scene follows. -->
@@ -47,12 +53,14 @@
       <!-- Chapters are inserted here from src/content.js -->
 
       <footer class="outro" id="outro">
+        <p class="issue">The end · for now</p>
         <p class="outro-big">Thanks for swinging by.</p>
-        <p>Want to see the city up close? Take over and swing anywhere you like.</p>
+        <p>Have a role, a freelance build or an idea to ship? Light up the signal. Or take over and swing anywhere you like.</p>
         <div class="cover-actions">
-          <button class="btn-primary" data-roam disabled>Explore the city</button>
-          <a class="btn-ghost" href="#top" id="to-top">Back to the start</a>
+          <a class="btn-primary" href="mailto:mohitacharya2727@gmail.com">Light the signal</a>
+          <button class="btn-ghost" data-roam disabled>Explore the city</button>
         </div>
+        <a class="back-top" href="#top" id="to-top">↑ Back to the start</a>
         <p class="credit">Built by Mohit Acharya with Three.js · 2026</p>
       </footer>
     </main>

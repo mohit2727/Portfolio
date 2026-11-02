@@ -55,7 +55,7 @@ export function createSky(scene) {
           // Red city glow hugging the skyline.
           c += uGlow * smoothstep(0.0, 0.04, h) * exp(-h * 9.0) * 0.45;
           if (h < 0.0) c = uHorizon;
-          gl_FragColor = vec4(c, 1.0);
+          gl_FragColor = sRGBTransferEOTF(vec4(c, 1.0)); // display colours -> linear scene
         }`,
     }),
   );

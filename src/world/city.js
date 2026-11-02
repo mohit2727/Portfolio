@@ -262,10 +262,11 @@ export function createCity(scene, renderer) {
     );
     beam.position.set(cx, h + 12 + 900, cz);
     fx.add(beam);
-    const marker = new THREE.Mesh(new THREE.OctahedronGeometry(5), new THREE.MeshBasicMaterial({ color, fog: false }));
+    // Marker and ring are pushed past 1.0 so they bloom.
+    const marker = new THREE.Mesh(new THREE.OctahedronGeometry(5), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(2.4), fog: false }));
     marker.position.set(cx, h + 40, cz);
     fx.add(marker);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(19, 0.3, 6, 64), new THREE.MeshBasicMaterial({ color, transparent: true }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(19, 0.3, 6, 64), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.8), transparent: true }));
     ring.rotation.x = Math.PI / 2;
     ring.position.set(cx, h + 0.6, cz);
     fx.add(ring);
@@ -346,18 +347,21 @@ export function createCity(scene, renderer) {
   scene.add(walks);
 
   // Park lawns and trees.
-  const lawnMat = new THREE.MeshLambertMaterial({ color: 0x1a3324 });
-  const lawnGeo = new THREE.PlaneGeometry(BLOCK, BLOCK);
+  const lawns = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(BLOCK, BLOCK).rotateX(-Math.PI / 2),
+    new THREE.MeshLambertMaterial({ color: 0x1a3324 }),
+    (PARK.i1 - PARK.i0 + 1) * (PARK.j1 - PARK.j0 + 1),
+  );
   const treePos = [];
+  let lawnK = 0;
   for (let i = PARK.i0; i <= PARK.i1; i++) {
     for (let j = PARK.j0; j <= PARK.j1; j++) {
-      const lawn = new THREE.Mesh(lawnGeo, lawnMat);
-      lawn.rotation.x = -Math.PI / 2;
-      lawn.position.set(blockCenter(i), SIDEWALK_H + 0.03, blockCenter(j));
-      scene.add(lawn);
+      lawns.setMatrixAt(lawnK++, m4.makeTranslation(blockCenter(i), SIDEWALK_H + 0.03, blockCenter(j)));
       for (let k = 0; k < 14; k++) treePos.push([blockCenter(i) + (rnd() - 0.5) * (BLOCK - 8), blockCenter(j) + (rnd() - 0.5) * (BLOCK - 8), 0.7 + rnd() * 0.6]);
     }
   }
+  lawns.frustumCulled = false;
+  scene.add(lawns);
   const trees = new THREE.InstancedMesh(new THREE.ConeGeometry(2.6, 8, 7), new THREE.MeshLambertMaterial({ color: 0x1f4630 }), treePos.length);
   treePos.forEach(([x, z, s], k) => {
     m4.makeScale(s, s, s).setPosition(x, SIDEWALK_H + 4 * s, z);
@@ -374,7 +378,7 @@ export function createCity(scene, renderer) {
       for (const [ox, oz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) lamps.push([x + ox * 9.5, z + oz * 9.5]);
     }
   }
-  const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.6, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffcf8a }), lamps.length);
+  const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.6, 6, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffcf8a).multiplyScalar(2.5) }), lamps.length);
   const poles = new THREE.InstancedMesh(new THREE.BoxGeometry(0.3, 7.5, 0.3), new THREE.MeshBasicMaterial({ color: 0x23263a }), lamps.length);
   const pools = new THREE.InstancedMesh(
     new THREE.PlaneGeometry(16, 16).rotateX(-Math.PI / 2),
@@ -392,8 +396,11 @@ export function createCity(scene, renderer) {
   bulbs.frustumCulled = poles.frustumCulled = pools.frustumCulled = false;
   scene.add(bulbs, poles, pools);
 
+  // The tower the story is heading to (or standing on) gets a brighter, wider beam.
+  let focusId = null;
   function update(dt, time) {
     bMat.uniforms.uTime.value = time;
+    const k = 1 - Math.exp(-3 * dt);
     for (const lm of landmarks) {
       lm.marker.rotation.y = time * 1.2;
       lm.marker.position.y = lm.top + 40 + Math.sin(time * 1.6) * 3;
@@ -401,6 +408,11 @@ export function createCity(scene, renderer) {
       const p = 1 + phase * 0.6;
       lm.ring.scale.set(p, p, 1);
       lm.ring.material.opacity = 1 - phase;
+      const on = focusId === null || lm.id === focusId;
+      const glow = on ? (focusId === null ? 0.32 : 0.55) : 0.16;
+      lm.beam.material.opacity += (glow - lm.beam.material.opacity) * k;
+      const w = lm.beam.scale.x + ((on && focusId ? 1.5 : 1) - lm.beam.scale.x) * k;
+      lm.beam.scale.set(w, 1, w);
     }
   }
 
@@ -437,5 +449,5 @@ export function createCity(scene, renderer) {
     return best;
   }
 
-  return { landmarks, blockInfo, nearBoxes, spawnRoof, update, buildingCount: count };
+  return { landmarks, blockInfo, nearBoxes, spawnRoof, update, setFocus: (id) => { focusId = id; }, buildingCount: count };
 }

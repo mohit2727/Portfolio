@@ -10,6 +10,7 @@ const ARC_LEN = 95; // metres per web swing
 const streetBeside = (v, sign) => -HALF + PITCH * (sign > 0 ? Math.ceil((v + HALF) / PITCH) : Math.floor((v + HALF) / PITCH));
 const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
 const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 /**
  * The scripted story route. Stop 0 is the intro rooftop, stops 1..n are the balconies of the
@@ -17,7 +18,7 @@ const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
  * round the corner, down the next) as a chain of web swings anchored to real buildings.
  * `update(dt, t)` takes a progress value t in [0, n] from the page scroll.
  */
-export function createStory({ city, hero, web, camera, rig, sections, spawn, onWeb }) {
+export function createStory({ city, hero, web, camera, rig, sections, spawn, onWeb, onLand, reduced = false }) {
   const stops = [{ pos: spawn.pos.clone(), out: spawn.face.clone(), intro: true }];
   for (const sec of sections) {
     const lm = city.landmarks.find((l) => l.id === sec.id);
@@ -105,9 +106,33 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn, onW
     if (!wide && !stop.intro) stopLook.y -= 2.6; // phones: card covers the bottom, keep the hero high
   }
 
-  function update(dt, target, wide) {
+  // Opening shot: high above and behind the intro rooftop, looking toward the Origin tower.
+  const introCam = new THREE.Vector3(), introLook = new THREE.Vector3();
+  {
+    const s0 = stops[0];
+    introCam.copy(s0.pos).addScaledVector(s0.out, -480).add(up.set(0, 340, 0));
+    introLook.copy(s0.pos).addScaledVector(s0.out, 420).add(up.set(0, 60, 0));
+  }
+  // Closing shot: a slow orbit high over all the towers.
+  const center = new THREE.Vector3();
+  for (const st of stops) if (st.tower) center.add(new THREE.Vector3(st.tower.x, 0, st.tower.z));
+  center.multiplyScalar(1 / sections.length);
+  const aerialCam = new THREE.Vector3(), aerialLook = new THREE.Vector3();
+  function aerial(time) {
+    const a = 0.6 + time * 0.03;
+    aerialCam.set(center.x + Math.cos(a) * 760, 520, center.z + Math.sin(a) * 760);
+    aerialLook.set(center.x, 90, center.z);
+  }
+
+  const INTRO_SECONDS = 3.6;
+  let intro = 1, prevStop = 0, shake = 0;
+  const camSmooth = new THREE.Vector3();
+
+  function update(dt, target, wide, time = 0) {
     shown += (target - shown) * (snapped ? 1 - Math.exp(-5 * dt) : 1);
-    const t = clamp(shown, 0, stops.length - 1);
+    const last = stops.length - 1;
+    const fin = clamp(shown - last, 0, 1); // 0..1 through the closing crane-up
+    const t = clamp(shown, 0, last);
     const k = Math.min(Math.floor(t), legs.length - 1);
     const f = t - k;
     const atStop = f < 0.0005 ? k : f > 0.9995 ? k + 1 : -1;
@@ -133,6 +158,14 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn, onW
     // A fresh anchor means a new web shot.
     if (anchor && anchor !== lastAnchor && snapped) onWeb?.();
     lastAnchor = anchor;
+    // Touching down on a balcony after a swing: a little impact.
+    if (atStop !== prevStop) {
+      if (snapped && prevStop < 0 && atStop > 0) {
+        shake = 1;
+        onLand?.(stops[atStop]);
+      }
+      prevStop = atStop;
+    }
     if (snapped && dt > 0) speed += (pos.distanceTo(lastPos) / dt - speed) * (1 - Math.exp(-6 * dt));
     lastPos.copy(pos);
     info.travelling = atStop < 0 && f > 0.06 && f < 0.94;
@@ -140,6 +173,9 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn, onW
       info.to = stops[k + 1].tower?.section;
       info.remaining = (1 - easeInOut(f)) * legs[k].total;
     }
+    // Light up the beacon of the tower we're on or heading to; all of them for the finale.
+    const focus = fin > 0 ? null : atStop >= 0 ? stops[Math.max(atStop, 1)] : stops[k + 1];
+    city.setFocus(focus?.tower?.id ?? null);
 
     hero.root.position.set(pos.x, pos.y + 0.16, pos.z);
     if (anchor) web.show(hand.copy(up).multiplyScalar(1.5).add(hero.root.position), anchor);
@@ -155,31 +191,62 @@ export function createStory({ city, hero, web, camera, rig, sections, spawn, onW
     const w = atStop >= 0 ? 1 : 1 - smooth(0, 0.1, Math.min(f, 1 - f));
     camPos.lerpVectors(travelCam, stopCam, w);
     look.lerpVectors(travelLook, stopLook, w);
+    if (fin > 0) {
+      aerial(time);
+      const e = easeInOut(fin);
+      camPos.lerp(aerialCam, e);
+      look.lerp(aerialLook, e);
+    }
+
+    let fov = wide ? 55 : 68;
+    const flying = intro < 1;
+    if (flying) {
+      // Opening fly-in. Scrolling during it hurries it along.
+      intro = Math.min(1, intro + dt / (target > 0.02 ? 0.9 : INTRO_SECONDS));
+      const ey = easeInOutCubic(intro), ex = easeInOutCubic(Math.min(1, intro * 1.15));
+      camPos.set(
+        introCam.x + (camPos.x - introCam.x) * ex,
+        introCam.y + (camPos.y - introCam.y) * ey,
+        introCam.z + (camPos.z - introCam.z) * ex,
+      );
+      look.lerpVectors(introLook, look, ey);
+      fov += (1 - ey) * 12;
+    }
     rig.avoid(pos, camPos);
 
-    if (!snapped) {
-      camera.position.copy(camPos);
+    if (!snapped || flying) {
+      camSmooth.copy(camPos);
       lookSmooth.copy(look);
       snapped = true;
     } else {
-      camera.position.lerp(camPos, 1 - Math.exp(-6 * dt));
+      camSmooth.lerp(camPos, 1 - Math.exp(-6 * dt));
       lookSmooth.lerp(look, 1 - Math.exp(-8 * dt));
     }
+    camera.position.copy(camSmooth);
+    if (shake > 0.002 && !reduced) {
+      const a = shake * shake * 0.22;
+      camera.position.x += Math.sin(time * 61) * a;
+      camera.position.y += Math.sin(time * 47 + 1.3) * a;
+      camera.position.z += Math.sin(time * 53 + 2.1) * a;
+    }
+    shake *= Math.exp(-4.5 * dt);
     camera.lookAt(lookSmooth);
     // Bank a little toward the side the web is on.
     let rollT = 0;
     if (anchor) rollT = clamp((anchor.x - pos.x) * tH.z - (anchor.z - pos.z) * tH.x, -1, 1) * -0.07 * (1 - w);
     roll += (rollT - roll) * (1 - Math.exp(-3 * dt));
     camera.rotateZ(roll);
-    const fov = wide ? 55 : 68;
-    camera.fov += (fov - camera.fov) * (1 - Math.exp(-3 * dt));
+    if (flying) camera.fov = fov;
+    else camera.fov += (fov - camera.fov) * (1 - Math.exp(-3 * dt));
     camera.updateProjectionMatrix();
   }
 
   return {
     stops,
     update,
-    reset() { snapped = false; },
+    reset() { snapped = false; intro = 1; },
+    // Start the opening fly-in (skipped for reduced motion).
+    playIntro() { intro = reduced ? 1 : 0; },
     heroPos: () => pos,
     heading: () => tH,
     speed: () => speed,

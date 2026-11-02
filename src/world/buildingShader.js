@@ -99,54 +99,61 @@ export const buildingFrag = /* glsl */ `
       else if (type == 1) { cs = vec2(3.4, 3.8); win = vec4(0.27, 0.73, 0.24, 0.8); }
       else { cs = vec2(3.2, 4.2); win = vec4(0.25, 0.87, 0.14, 0.86); }
 
-      vec2 c = uv / cs;
-      vec2 id = floor(c);
-      vec2 f = fract(c);
-      float isWin = step(win.x, f.x) * step(f.x, win.y) * step(win.z, f.y) * step(f.y, win.w);
-      float r = hash(id + vSeed * 17.0);
-      float floorLit = step(0.93, hash(vec2(id.y, vSeed * 31.0)));
-      float lit = clamp(step(0.62, r) + floorLit * step(0.25, r), 0.0, 1.0);
-
-      vec3 wall = vTint * moon;
-      if (type == 1) {
-        // Brick courses with lighter mortar, and a stone lintel over each window.
-        vec2 b = uv / vec2(0.6, 0.25);
-        b.x += 0.5 * mod(floor(b.y), 2.0);
-        vec2 bf = fract(b);
-        float mortar = min(step(bf.x, 0.06) + step(bf.y, 0.12), 1.0);
-        float detail = 1.0 - smoothstep(50.0, 140.0, dist); // bricks shimmer when tiny on screen
-        wall *= mix(1.07, (0.82 + 0.3 * hash(floor(b))) * (1.0 + 0.45 * mortar), detail);
-        float lintel = step(win.x - 0.04, f.x) * step(f.x, win.y + 0.04) * step(win.w, f.y) * step(f.y, win.w + 0.07);
-        wall = mix(wall, vec3(0.32, 0.3, 0.28) * moon, lintel);
-      } else if (type == 2) {
-        // Stone piers between window columns and a sill line under each floor.
-        wall *= 1.0 + 0.28 * step(f.x, 0.17);
-        wall *= 1.0 - 0.35 * step(f.y, 0.06);
-      } else {
-        // Glass curtain wall: dark spandrels, thin bright mullions.
-        wall *= 0.75 + 0.4 * (step(f.x, 0.04) + step(0.96, f.x));
-      }
-
-      vec3 d = vec3(dot(V, u), V.y, dot(V, -n));
-      vec2 wf = vec2((f.x - win.x) / (win.y - win.x), (f.y - win.z) / (win.w - win.z));
-      vec2 wsize = cs * vec2(win.y - win.x, win.w - win.z);
-      vec3 inside = lit > 0.5 ? room(wf, wsize, d, r) : room(wf, wsize, d, r) * 0.06 + vec3(0.01, 0.012, 0.02);
-      // Some lit windows have blinds half down.
-      float slats = mix(0.5, step(0.5, fract(wf.y * 14.0)), 1.0 - smoothstep(40.0, 110.0, dist));
-      inside *= 1.0 - 0.55 * step(0.85, fract(r * 5.3)) * step(0.55, wf.y) * slats;
-      float fres = pow(1.0 - clamp(d.z, 0.0, 1.0), 4.0);
-      vec3 sky = mix(vec3(0.2, 0.11, 0.2), vec3(0.04, 0.05, 0.13), clamp(V.y * 2.0 + 0.5, 0.0, 1.0));
-      float refl = clamp(fres + (type == 0 ? 0.3 : 0.12) * (1.0 - lit), 0.0, 0.9);
-      vec3 glass = mix(inside, sky, refl);
-      // Recess shadow just inside the frame sells the window depth.
-      float edge = min(min(wf.x, 1.0 - wf.x) * wsize.x, min(wf.y, 1.0 - wf.y) * wsize.y);
-      glass *= mix(0.45, 1.0, smoothstep(0.0, 0.22, edge));
-      vec3 near = mix(wall, glass, isWin);
-
-      // Far away the detail aliases, so fade to the facade's average colour.
+      // Far away the detail aliases, so facades fade to their average colour. Past the fade
+      // there is nothing left to draw, so skip the window and interior work entirely.
       float area = (win.y - win.x) * (win.w - win.z);
-      vec3 far = mix(wall, vec3(1.0, 0.78, 0.5) * 0.2 + vec3(0.02), area);
-      col = mix(near, far, smoothstep(350.0, 1100.0, dist));
+      vec3 wallFar = vTint * moon * (type == 1 ? 1.07 : 1.0);
+      vec3 far = mix(wallFar, vec3(1.0, 0.78, 0.5) * 0.2 + vec3(0.02), area);
+      float farMix = smoothstep(350.0, 1100.0, dist);
+      if (farMix > 0.999) {
+        col = far;
+      } else {
+        vec2 c = uv / cs;
+        vec2 id = floor(c);
+        vec2 f = fract(c);
+        float isWin = step(win.x, f.x) * step(f.x, win.y) * step(win.z, f.y) * step(f.y, win.w);
+        float r = hash(id + vSeed * 17.0);
+        float floorLit = step(0.93, hash(vec2(id.y, vSeed * 31.0)));
+        float lit = clamp(step(0.62, r) + floorLit * step(0.25, r), 0.0, 1.0);
+
+        vec3 wall = vTint * moon;
+        if (type == 1) {
+          // Brick courses with lighter mortar, and a stone lintel over each window.
+          vec2 b = uv / vec2(0.6, 0.25);
+          b.x += 0.5 * mod(floor(b.y), 2.0);
+          vec2 bf = fract(b);
+          float mortar = min(step(bf.x, 0.06) + step(bf.y, 0.12), 1.0);
+          float detail = 1.0 - smoothstep(50.0, 140.0, dist); // bricks shimmer when tiny on screen
+          wall *= mix(1.07, (0.82 + 0.3 * hash(floor(b))) * (1.0 + 0.45 * mortar), detail);
+          float lintel = step(win.x - 0.04, f.x) * step(f.x, win.y + 0.04) * step(win.w, f.y) * step(f.y, win.w + 0.07);
+          wall = mix(wall, vec3(0.32, 0.3, 0.28) * moon, lintel);
+        } else if (type == 2) {
+          // Stone piers between window columns and a sill line under each floor.
+          wall *= 1.0 + 0.28 * step(f.x, 0.17);
+          wall *= 1.0 - 0.35 * step(f.y, 0.06);
+        } else {
+          // Glass curtain wall: dark spandrels, thin bright mullions.
+          wall *= 0.75 + 0.4 * (step(f.x, 0.04) + step(0.96, f.x));
+        }
+
+        vec3 d = vec3(dot(V, u), V.y, dot(V, -n));
+        vec2 wf = vec2((f.x - win.x) / (win.y - win.x), (f.y - win.z) / (win.w - win.z));
+        vec2 wsize = cs * vec2(win.y - win.x, win.w - win.z);
+        vec3 inside = lit > 0.5 ? room(wf, wsize, d, r) : room(wf, wsize, d, r) * 0.06 + vec3(0.01, 0.012, 0.02);
+        // Some lit windows have blinds half down.
+        float slats = mix(0.5, step(0.5, fract(wf.y * 14.0)), 1.0 - smoothstep(40.0, 110.0, dist));
+        inside *= 1.0 - 0.55 * step(0.85, fract(r * 5.3)) * step(0.55, wf.y) * slats;
+        float fres = pow(1.0 - clamp(d.z, 0.0, 1.0), 4.0);
+        vec3 sky = mix(vec3(0.2, 0.11, 0.2), vec3(0.04, 0.05, 0.13), clamp(V.y * 2.0 + 0.5, 0.0, 1.0));
+        float refl = clamp(fres + (type == 0 ? 0.3 : 0.12) * (1.0 - lit), 0.0, 0.9);
+        vec3 glass = mix(inside, sky, refl);
+        // Recess shadow just inside the frame sells the window depth.
+        float edge = min(min(wf.x, 1.0 - wf.x) * wsize.x, min(wf.y, 1.0 - wf.y) * wsize.y);
+        glass *= mix(0.45, 1.0, smoothstep(0.0, 0.22, edge));
+        vec3 near = mix(wall, glass, isWin);
+
+        col = mix(near, mix(wall, vec3(1.0, 0.78, 0.5) * 0.2 + vec3(0.02), area), farMix);
+      }
 
       // Street level: shopfronts and neon signs on buildings that reach the ground.
       if (vBase < 0.5 && vW.y < 5.4) {
@@ -165,5 +172,6 @@ export const buildingFrag = /* glsl */ `
       col += vec3(0.95, 0.2, 0.25) * 0.3 * smoothstep(vTop - 1.0, vTop, vW.y);
     }
     float fog = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
-    gl_FragColor = vec4(mix(col, uFog, fog), 1.0);
+    // Colours above are display (sRGB) values; the scene renders in linear light for the bloom.
+    gl_FragColor = sRGBTransferEOTF(vec4(mix(col, uFog, fog), 1.0));
   }`;

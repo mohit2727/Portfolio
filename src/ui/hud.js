@@ -7,7 +7,7 @@ export function createHUD({ sections, landmarks, blockInfo, onTravel }) {
   const els = {
     tl: $('hud-tl'), br: $('hud-br'), map: $('minimap'), list: $('mission-list'), count: $('mission-count'),
     speed: $('g-speed'), alt: $('g-alt'), hint: $('hint'), sfx: $('sfx'), toast: $('toast'), flash: $('flash'),
-    speedlines: $('speedlines'), panel: $('panel'), panelTag: $('panel-tag'), panelTitle: $('panel-title'),
+    panel: $('panel'), panelTag: $('panel-tag'), panelTitle: $('panel-title'),
     panelBody: $('panel-body'), panelClose: $('panel-close'), help: $('help'), helpBtn: $('help-btn'),
   };
 
@@ -134,10 +134,9 @@ export function createHUD({ sections, landmarks, blockInfo, onTravel }) {
   }
 
   let acc = 0;
-  function update(player, yaw, dt, reduced) {
+  function update(player, yaw, dt) {
     drawMap(player, yaw);
     const speed = player.vel.length();
-    els.speedlines.style.opacity = reduced ? 0 : Math.max(0, Math.min(1, (speed - 55) / 70)).toFixed(2);
     acc += dt;
     if (acc < 0.1) return;
     acc = 0;
@@ -184,7 +183,6 @@ export function createHUD({ sections, landmarks, blockInfo, onTravel }) {
       closePanel();
       hint('');
       els.help.hidden = true;
-      els.speedlines.style.opacity = 0;
     }
   }
 

@@ -94,6 +94,35 @@ export function createAudio() {
     osc.stop(t + 0.12);
   }
 
+  // Landing on a balcony: a low thump with a short gritty scuff on top.
+  function land() {
+    if (!ctx || !on) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(140, t);
+    osc.frequency.exponentialRampToValueAtTime(45, t + 0.22);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.6, t + 0.012);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    osc.connect(og).connect(master);
+    osc.start(t);
+    osc.stop(t + 0.32);
+
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx, 0.2);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.25, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    src.connect(lp).connect(g).connect(master);
+    src.start(t);
+    src.stop(t + 0.2);
+  }
+
   // Wire every [data-sound] button to one shared state.
   const buttons = [...document.querySelectorAll('[data-sound]')];
   const paint = () => buttons.forEach((b) => {
@@ -112,5 +141,5 @@ export function createAudio() {
     });
   }
 
-  return { setWind, thwip, isOn: () => on };
+  return { setWind, thwip, land, isOn: () => on };
 }

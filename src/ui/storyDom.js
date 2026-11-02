@@ -5,6 +5,7 @@ export function createStoryDom(sections) {
   const intro = document.getElementById('top');
   const nav = document.getElementById('chapter-nav');
   const outro = document.getElementById('outro');
+  const bar = document.getElementById('progress-fill');
 
   const cards = sections.map((s, i) => {
     const sec = document.createElement('section');
@@ -19,6 +20,8 @@ export function createStoryDom(sections) {
         <div class="panel-body">${s.html}</div>
       </article>`;
     main.insertBefore(sec, outro);
+    // Stagger index for the reveal animation.
+    sec.querySelectorAll('.panel-body > *').forEach((el, k) => el.style.setProperty('--i', k));
     return sec.querySelector('.story-card');
   });
 
@@ -38,7 +41,8 @@ export function createStoryDom(sections) {
   });
 
   // Piecewise-linear map from scrollY to t. A leg starts once the previous card has mostly
-  // left the screen and ends just before the next card rises into view.
+  // left the screen and ends just before the next card rises into view. After the last card,
+  // t runs on from n to n + 1 as the outro scrolls up: the camera's closing crane-up.
   let keys = [[0, 0]];
   function layout() {
     const vh = innerHeight;
@@ -51,6 +55,11 @@ export function createStoryDom(sections) {
       keys.push([start, i], [arrive, i + 1]);
       prevEnd = top + card.offsetHeight;
     });
+    const oTop = outro.getBoundingClientRect().top + scrollY;
+    const maxY = document.documentElement.scrollHeight - vh;
+    const start = Math.max(prevEnd - vh * 0.3, keys[keys.length - 1][0] + 1);
+    const end = Math.max(Math.min(oTop + outro.offsetHeight / 2 - vh / 2, maxY - 2), start + 1);
+    keys.push([start, cards.length], [end, cards.length + 1]);
   }
 
   function progress() {
@@ -71,9 +80,14 @@ export function createStoryDom(sections) {
     scrollTo({ top: y, behavior: 'smooth' });
   }
 
-  let active = -1;
+  let active = -1, shownBar = -1;
   function setActive(t) {
-    const i = Math.round(t);
+    const p = Math.round((t / (cards.length + 1)) * 1000) / 1000;
+    if (p !== shownBar) {
+      shownBar = p;
+      bar.style.transform = `scaleX(${p})`;
+    }
+    const i = Math.min(Math.round(t), cards.length);
     if (i === active) return;
     active = i;
     dots.forEach((d, k) => d.classList.toggle('on', k === i));
@@ -86,10 +100,11 @@ export function createStoryDom(sections) {
 
   // Pop each card the first time it rises into view.
   if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    cards.forEach((c) => c.classList.add('pending'));
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) {
         if (e.isIntersecting) {
-          e.target.classList.add('in');
+          e.target.classList.replace('pending', 'in');
           io.unobserve(e.target);
         }
       }
